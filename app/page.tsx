@@ -1,13 +1,11 @@
 "use client"
 import { useEffect, useRef, useState } from "react";
-
-interface GameState {
-  currentTurn: number;
-  turnOrder: string[];
-  messages: string[];
-  isGameActive: boolean;
-  currentPlayer: string | null;
-}
+import { PlayerCard } from "./components/PlayerCard";
+import { PlayersSidebar } from "./components/PlayersSidebar";
+import { Message } from "./components/Message";
+import { TurnIndicator } from "./components/TurnIndicator";
+import { NameInputModal } from "./components/NameInputModal";
+import { GameState } from "./types/game";
 
 export default function Home() {
   const [messages, setMessages] = useState<string[]>([]);
@@ -26,6 +24,12 @@ export default function Home() {
   const [messagesThisTurn, setMessagesThisTurn] = useState(0);
   const [hasJoined, setHasJoined] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const userNameRef = useRef<string>('');
+
+  // Update the ref whenever userName changes
+  useEffect(() => {
+    userNameRef.current = userName;
+  }, [userName]);
 
   useEffect(() => {
     // Check if user name is already stored
@@ -53,15 +57,28 @@ export default function Home() {
         console.log('Received message:', data);
         
         if (data.type === 'gameState') {
+          const previousCurrentPlayer = gameState.currentPlayer;
           setGameState(data.data);
           setMessages(data.data.messages);
+          
+          // Get our message count from server
+          if (data.data.playerMessageCounts && data.data.playerMessageCounts[userNameRef.current] !== undefined) {
+            setMessagesThisTurn(data.data.playerMessageCounts[userNameRef.current]);
+            console.log('Updated message count from server:', data.data.playerMessageCounts[userNameRef.current]);
+          }
+          
+          // Reset message count when turn changes
+          if (previousCurrentPlayer !== data.data.currentPlayer) {
+            console.log('Turn changed, resetting message count');
+          }
+          
           console.log('Updated game state:', data.data);
         } else if (data.type === 'newMessage') {
           setMessages(prev => [...prev, data.data]);
-          // Increment message count if it's our message
-          if (data.data.startsWith(`${userName}:`)) {
-            setMessagesThisTurn(prev => prev + 1);
-          }
+          // Don't increment locally - wait for server to send updated game state
+          console.log('Received new message:', data.data);
+          console.log('Current userNameRef:', userNameRef.current);
+          console.log('Message starts with our name:', data.data.startsWith(`${userNameRef.current}:`));
         } else if (data.type === 'error') {
           setErrorMessage(data.data);
           setTimeout(() => setErrorMessage(''), 3000);
@@ -83,7 +100,7 @@ export default function Home() {
         wsRef.current.close();
       }
     };
-  }, []);
+  }, []); // Empty dependency array - connection only created once
 
   useEffect(() => {
     if (userName && wsRef.current?.readyState === WebSocket.OPEN && !hasJoined) {
@@ -131,36 +148,11 @@ export default function Home() {
 
   if (showNameInput) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100">
-        <div className="w-full max-w-md mx-4 bg-white rounded-xl shadow-lg p-8 border border-gray-200">
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">Welcome to Turn-Based Chat</h1>
-            <p className="text-gray-600">Each player gets 3 messages per turn</p>
-          </div>
-          
-          <form onSubmit={handleNameSubmit} className="space-y-4">
-            <input
-              type="text"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              placeholder="Enter your name..."
-              autoFocus
-            />
-            <button
-              type="submit"
-              disabled={!userName.trim()}
-              className={`w-full px-6 py-3 rounded-lg font-medium transition-all ${
-                userName.trim()
-                  ? 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 shadow-sm hover:shadow'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }`}
-            >
-              Join Game
-            </button>
-          </form>
-        </div>
-      </main>
+      <NameInputModal 
+        userName={userName}
+        setUserName={setUserName}
+        onSubmit={handleNameSubmit}
+      />
     );
   }
 
@@ -168,90 +160,12 @@ export default function Home() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 p-4">
       <div className="w-full max-w-6xl mx-auto bg-white rounded-xl shadow-lg flex h-[90vh] border border-gray-200">
         {/* Left sidebar - Players list */}
-        <div className="w-80 bg-gray-50 border-r border-gray-200 flex flex-col">
-          {/* Header */}
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-800">Players</h2>
-            <p className="text-sm text-gray-600">{gameState.turnOrder.length} online</p>
-          </div>
-
-          {/* Players list */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {gameState.turnOrder.map((playerName, index) => {
-              const isCurrentPlayer = playerName === gameState.currentPlayer;
-              const isMe = playerName === userName;
-              
-              return (
-                <div 
-                  key={playerName}
-                  className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
-                    isCurrentPlayer 
-                      ? 'bg-green-100 border border-green-200' 
-                      : 'bg-white border border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    isMe ? 'bg-blue-500' : 'bg-gray-400'
-                  }`}>
-                    <span className="text-white font-medium text-sm">
-                      {playerName.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-medium truncate ${
-                        isMe ? 'text-blue-600' : 'text-gray-800'
-                      }`}>
-                        {playerName}
-                        {isMe && <span className="text-xs text-blue-500 ml-1">(You)</span>}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className={`w-2 h-2 rounded-full ${
-                        isCurrentPlayer ? 'bg-green-500' : 'bg-gray-300'
-                      }`}></div>
-                      <span className="text-xs text-gray-500">
-                        {isCurrentPlayer ? 'Current Turn' : 'Waiting'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Turn indicator */}
-                  {isCurrentPlayer && (
-                    <div className="flex gap-1">
-                      {[1, 2, 3].map(num => (
-                        <div
-                          key={num}
-                          className={`w-2 h-2 rounded-full ${
-                            num <= (isMe ? messagesThisTurn : 0) ? 'bg-green-500' : 'bg-green-200'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Connection status */}
-          <div className="p-4 border-t border-gray-200">
-            <div className={`flex items-center gap-2 text-sm ${
-              connectionStatus === 'connected' ? 'text-green-600' :
-              connectionStatus === 'disconnected' ? 'text-red-600' :
-              'text-yellow-600'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${
-                connectionStatus === 'connected' ? 'bg-green-500' :
-                connectionStatus === 'disconnected' ? 'bg-red-500' :
-                'bg-yellow-500'
-              }`}></div>
-              {connectionStatus}
-            </div>
-          </div>
-        </div>
+        <PlayersSidebar 
+          gameState={gameState}
+          userName={userName}
+          connectionStatus={connectionStatus}
+          messagesThisTurn={messagesThisTurn}
+        />
 
         {/* Main chat area */}
         <div className="flex-1 flex flex-col">
@@ -304,28 +218,11 @@ export default function Home() {
           </div>
 
           {/* Turn indicator */}
-          {isMyTurn && (
-            <div className="px-6 py-2 bg-green-50 border-b border-green-100">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-green-700">
-                  {isSinglePlayer 
-                    ? `Messages: ${messagesThisTurn}/3` 
-                    : `Your turn! Messages: ${messagesThisTurn}/3`
-                  }
-                </span>
-                <div className="flex gap-1">
-                  {[1, 2, 3].map(num => (
-                    <div
-                      key={num}
-                      className={`w-3 h-3 rounded-full ${
-                        num <= messagesThisTurn ? 'bg-green-500' : 'bg-green-200'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          <TurnIndicator 
+            isMyTurn={isMyTurn}
+            isSinglePlayer={isSinglePlayer}
+            messagesThisTurn={messagesThisTurn}
+          />
 
           {/* Error message */}
           {errorMessage && (
@@ -337,12 +234,7 @@ export default function Home() {
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50">
             {messages.map((message, index) => (
-              <div 
-                key={index}
-                className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 transition-all hover:shadow-md"
-              >
-                <p className="text-gray-800 font-medium">{message}</p>
-              </div>
+              <Message key={index} message={message} />
             ))}
           </div>
 

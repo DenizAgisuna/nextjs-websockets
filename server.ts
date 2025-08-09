@@ -30,6 +30,12 @@ const gameState: GameState = {
 const MESSAGES_PER_TURN = 3;
 
 function broadcastGameState() {
+  // Create a map of player message counts
+  const playerMessageCounts: { [key: string]: number } = {};
+  clients.forEach(client => {
+    playerMessageCounts[client.name] = client.messagesThisTurn;
+  });
+
   const stateMessage = JSON.stringify({
     type: 'gameState',
     data: {
@@ -37,7 +43,8 @@ function broadcastGameState() {
       turnOrder: gameState.turnOrder,
       messages: gameState.messages,
       isGameActive: gameState.isGameActive,
-      currentPlayer: gameState.turnOrder[gameState.currentTurn] || null
+      currentPlayer: gameState.turnOrder[gameState.currentTurn] || null,
+      playerMessageCounts: playerMessageCounts
     }
   });
 
@@ -49,6 +56,12 @@ function broadcastGameState() {
 }
 
 function sendGameStateToClient(ws: WebSocket) {
+  // Create a map of player message counts
+  const playerMessageCounts: { [key: string]: number } = {};
+  clients.forEach(client => {
+    playerMessageCounts[client.name] = client.messagesThisTurn;
+  });
+
   const stateMessage = JSON.stringify({
     type: 'gameState',
     data: {
@@ -56,7 +69,8 @@ function sendGameStateToClient(ws: WebSocket) {
       turnOrder: gameState.turnOrder,
       messages: gameState.messages,
       isGameActive: gameState.isGameActive,
-      currentPlayer: gameState.turnOrder[gameState.currentTurn] || null
+      currentPlayer: gameState.turnOrder[gameState.currentTurn] || null,
+      playerMessageCounts: playerMessageCounts
     }
   });
   
