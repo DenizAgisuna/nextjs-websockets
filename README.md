@@ -15,28 +15,3 @@ Then start the development server:
 ```bash
 npm run dev
 ```
-
-## Deploying to Fly.io
-
-To deploy this application to Fly.io, simply run:
-
-```bash
-fly launch
-```
-
-When it asks:
-```
-An existing fly.toml file was found for app ws-demo-next
-? Would you like to copy its configuration to the new app?
-```
-
-Choose **Yes**.
-
-When it asks:
-```
-? Do you want to tweak these settings before proceeding?
-```
-
-Choose **No** (unless you want to change the app name or region, etc)
-
-Once finished, you'll be able to access your app at `https://<YOUR-APP>.fly.dev`
